@@ -34,9 +34,10 @@ private:
         PASSWORD_LENGTH=56
     };
     bool is_valid_password(const std::string &password);
+    void recordIP(const std::string &password, const std::string &ip);
 public:
     Authenticator(const Config &config);
-    bool auth(const std::string &password);
+    bool auth(const std::string &password, const std::string &endpoint);
     void record(const std::string &password, uint64_t download, uint64_t upload);
     ~Authenticator();
 };
