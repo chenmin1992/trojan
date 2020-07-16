@@ -42,7 +42,7 @@ Authenticator::Authenticator(const Config &config) {
     Log::log_with_date_time("connected to MySQL server", Log::INFO);
 }
 
-bool Authenticator::auth(const string &password) {
+bool Authenticator::auth(const string &password, const string &ip) {
     if (!is_valid_password(password)) {
         return false;
     }
@@ -63,14 +63,11 @@ bool Authenticator::auth(const string &password) {
     int64_t quota = atoll(row[0]);
     int64_t used = atoll(row[1]);
     mysql_free_result(res);
-    if (quota < 0) {
+    if (quota > used || quota < 0) {
+        recordIP(password, ip);
         return true;
     }
-    if (used >= quota) {
-        Log::log_with_date_time(password + " ran out of quota", Log::WARN);
-        return false;
-    }
-    return true;
+    return false;
 }
 
 void Authenticator::record(const string &password, uint64_t download, uint64_t upload) {
@@ -78,6 +75,15 @@ void Authenticator::record(const string &password, uint64_t download, uint64_t u
         return;
     }
     if (mysql_query(&con, ("UPDATE users SET download = download + " + to_string(download) + ", upload = upload + " + to_string(upload) + " WHERE password = '" + password + '\'').c_str())) {
+        Log::log_with_date_time(mysql_error(&con), Log::ERROR);
+    }
+}
+
+void Authenticator::recordIP(const string &password, const string &ip) {
+    if (!is_valid_password(password)) {
+        return;
+    }
+    if (mysql_query(&con, ("UPDATE users SET ips = CONCAT(ips,IF(ips='','',','),'" + ip + "') WHERE password = '" + password + "' AND ips NOT LIKE '%" + ip + "%'").c_str())) {
         Log::log_with_date_time(mysql_error(&con), Log::ERROR);
     }
 }
@@ -101,8 +107,9 @@ Authenticator::~Authenticator() {
 #else // ENABLE_MYSQL
 
 Authenticator::Authenticator(const Config&) {}
-bool Authenticator::auth(const string&) { return true; }
+bool Authenticator::auth(const string&, const string&) { return true; }
 void Authenticator::record(const string&, uint64_t, uint64_t) {}
+void Authenticator::recordIP(const string &password, const string &ip) {}
 bool Authenticator::is_valid_password(const string&) { return true; }
 Authenticator::~Authenticator() {}
 
